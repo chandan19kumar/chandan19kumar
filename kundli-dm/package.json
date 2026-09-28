@@ -1,0 +1,21 @@
+{
+  "name": "kaylatalk-kundli-dm",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Instagram DM se live Vedic kundli: naam, janm tithi, samay aur sthan milte hi poori kundli image + report.",
+  "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "test": "node --test \"test/**/*.test.js\"",
+    "demo": "node scripts/demo.js"
+  },
+  "dependencies": {
+    "@resvg/resvg-js": "^2.6.2",
+    "all-the-cities": "^3.1.0",
+    "astronomy-engine": "^2.1.19",
+    "country-state-city": "^3.2.1",
+    "tz-lookup": "^6.1.25"
+  }
+}
