@@ -27,6 +27,31 @@ Bot  : ✨ Rahul Kumar ji, aapki janm kundli taiyaar hai! 4 pages 👇
 - Stays **silent on ordinary DMs**; it only starts on "kundli"/"कुंडली" or a message with birth details.
 - "consult" → hands over to a human. "cancel" → stops. 3 kundlis per user per day (configurable).
 
+## Comment auto-reply
+
+Every new comment on a post or reel gets looked at, with the post's caption as context:
+
+| Comment | What happens | AI cost |
+|---|---|---|
+| Birth details ("Riya 12/03/1995 6:45 am Patna") or "kundli banao" | Public reply "DM check kijiye 🙏" + **private DM** with their details as a ready-to-send line. Birth details are never repeated in public. | none |
+| Emojis, "Jai Mata Di", "so true", "nice" | Warm thank-you (varied wording, so it doesn't look like a bot) | none |
+| Anything else | Claude reads caption + comment and replies in the commenter's language (Hindi / Hinglish / English), ≤ 220 characters | 1 call |
+| Personal question ("shaadi me deri kyu?") | Short public reply, no prediction in public + DM invite for a free kundli | 1 call |
+| Criticism | Calm, non-defensive reply, flagged for the team | 1 call |
+| Spam, links, abuse, "ignore your rules…" | No reply; abuse is flagged | 1 call |
+
+Rules the replies follow: no guarantees, no fear about doshas, no death/illness/divorce predictions,
+no medical/legal/financial advice, no prices, never claims to be human. At most 2 replies per
+person per post per day. Every decision is logged in `kundliCommentLog` (30 days).
+
+- `COMMENT_MODE=draft` logs the replies without posting, so the team can read a day of
+  them before switching to `auto`.
+- `BRAND_NOTES` adds facts about KaylaTalk (services, timings, what "consult" costs) the
+  replies may use. Without it, replies never invent facts.
+- Model: Claude Opus 5 at low effort, structured output, cached system prompt, with the
+  server-side refusal fallback enabled (`fallbacks: "default"`), so a declined request is
+  retried on another model instead of failing.
+
 ## Accuracy — how "precise" is verified
 
 Planet positions come from [Astronomy Engine](https://github.com/cosinekitty/astronomy)
@@ -100,23 +125,26 @@ KaylaTalk Firebase project (e.g. as `functions-kundli/`) and add it to `firebase
 
 1. **Meta app** (developers.facebook.com): Instagram professional account → app with
    *Instagram API with Instagram Login* → permissions `instagram_business_basic`,
-   `instagram_business_manage_messages`. Your existing posting app can be reused, but
-   **DM permission needs App Review** (privacy policy URL + screencast). Until approved it
+   `instagram_business_manage_messages`, `instagram_business_manage_comments`. Your existing
+   posting app can be reused, but **DM and comment permissions need App Review** (privacy policy URL + screencast). Until approved it
    only works for accounts added as app testers, so **start this first**.
 2. **Secrets**
    ```
    firebase functions:secrets:set IG_APP_SECRET        # Meta app secret
    firebase functions:secrets:set IG_VERIFY_TOKEN      # any random string
    firebase functions:secrets:set IG_ACCESS_TOKEN      # long-lived IG user token
+   firebase functions:secrets:set ANTHROPIC_API_KEY    # for comment replies
    firebase functions:secrets:set GOOGLE_GEOCODING_KEY # optional
    ```
    Optional `.env`: `IG_API_BASE` (default `https://graph.instagram.com/v23.0`; set the
-   current Graph API version), `IG_SENDER_ID` (`me`), `REPORT_BASE_URL`, `KUNDLI_NODE`, `BOT_MAX_PER_DAY`.
+   current Graph API version), `IG_SENDER_ID` (`me`), `REPORT_BASE_URL`, `KUNDLI_NODE`, `BOT_MAX_PER_DAY`,
+   `COMMENT_MODE` (`auto` | `draft`), `BRAND_NOTES`.
 3. `npm install && npm test && firebase deploy --only functions:kundli-dm,hosting`
 4. **Webhook** in the Meta app: callback URL = the `instagramWebhook` function URL, verify
-   token = `IG_VERIFY_TOKEN`, subscribe to `messages`.
+   token = `IG_VERIFY_TOKEN`, subscribe to `messages` and `comments`.
 5. **Firestore TTL policies** on field `expireAt` for collections `kundliReports`,
-   `kundliDmInbox`, `kundliDmUsage` so old data deletes itself (reports: 90 days).
+   `kundliDmInbox`, `kundliDmUsage`, `kundliCommentInbox`, `kundliCommentReplies`,
+   `kundliCommentLog` so old data deletes itself (reports: 90 days).
 
 If you use the Messenger-Platform flavour (Facebook Page linked) instead, set
 `IG_API_BASE=https://graph.facebook.com/v23.0`, `IG_SENDER_ID=<PAGE_ID>` and a Page token.
@@ -149,7 +177,7 @@ and expire after 90 days; sessions and counters expire too.
 
 ```
 npm install
-npm test                    # 56 tests (accuracy, charts, parser, places, conversation, end-to-end)
+npm test                    # 68 tests (accuracy, charts, parser, places, conversation, comments, end-to-end)
 node scripts/demo.js        # writes out/card-1..4.png
 ```
 
@@ -159,8 +187,10 @@ the committed test fixture and is never part of the product.
 
 ## Not yet verified live
 
-- Real Instagram Send/Webhook calls: tested with recorded payload shapes and a mocked
-  `fetch`, not against Meta. First run with a tester account.
+- Real Instagram Send/Webhook/comment-reply calls: tested with the documented payload shapes
+  and a mocked `fetch`, not against Meta. First run with a tester account.
+- Comment replies from Claude: the request is tested with a mocked client; no live API key was
+  available here. Start with `COMMENT_MODE=draft` and read the log before going `auto`.
 - `src/store/firestore.js`: not run against the emulator here. Test with `npm run serve`.
 - Hindi schwa rule has known exceptions (सीतामढ़ी → "sitamrhi"); the typo matcher still finds them.
 

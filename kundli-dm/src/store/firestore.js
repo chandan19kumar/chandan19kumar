@@ -45,6 +45,23 @@ export function createFirestoreStore({ db, bucket, reportTtlDays = 90 }) {
         throw e;
       }
     },
+    comments: {
+      claim: async (id, data = {}) => {
+        try {
+          await db.collection('kundliCommentInbox').doc(String(id)).create({ ...data, receivedAt: new Date(), expireAt: new Date(Date.now() + 7 * 86400e3) });
+          return true;
+        } catch (e) { if (e.code === 6 || /already exists/i.test(e.message)) return false; throw e; }
+      },
+      recentReplies: async (u, m) => { const s = await db.collection('kundliCommentReplies').doc(`${u}_${m}`).get(); return s.exists ? s.data().n || 0 : 0; },
+      recordReply: async (u, m) => {
+        const ref = db.collection('kundliCommentReplies').doc(`${u}_${m}`);
+        await db.runTransaction(async (tx) => {
+          const s = await tx.get(ref);
+          tx.set(ref, { n: (s.exists ? s.data().n || 0 : 0) + 1, expireAt: new Date(Date.now() + 86400e3) });
+        });
+      },
+      log: async (entry) => { await db.collection('kundliCommentLog').add({ ...entry, at: new Date(), expireAt: new Date(Date.now() + 30 * 86400e3) }); },
+    },
     // One message at a time per user, so two quick DMs can't race on the session.
     withUserLock: async (u, fn) => {
       const ref = sessions.doc(u);
